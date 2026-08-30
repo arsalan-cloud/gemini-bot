@@ -13,15 +13,15 @@ from telegram.ext import (
 )
 import google.generativeai as genai
 
-# Load Environment Variables
+# خواندن مقادیر از پنل Render (Environment Variables)
 TELEGRAM_TOKEN = os.getenv("8997663787:AAFIZU23Y-W-66Jx0MR2yMosAALvy5kX0NU")
 GEMINI_API_KEY = os.getenv("AQ.Ab8RN6KXG9t1MuvZKzJRG1HR6GTsHmF7a8n5O0_5ZDq_Oz5rxw")
 
-# Configure Gemini AI
+# تنظیم کلید API جمینای
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
 
-# Flask Web Server (keeps Render instance alive)
+# وب‌سرور Flask جهت زنده نگه داشتن سرویس در Render
 flask_app = Flask(__name__)
 
 @flask_app.route('/')
@@ -32,10 +32,10 @@ def run_flask():
     port = int(os.getenv("PORT", 10000))
     flask_app.run(host="0.0.0.0", port=port)
 
-# Gemini AI Text Request
+# پاسخ‌دهی متنی با سرویس جمینای
 def ask_gemini(user_text: str) -> str:
     if not GEMINI_API_KEY:
-        return "خطا: کلید GEMINI_API_KEY در محیط تنظیمی Render تعریف نشده است."
+        return "خطا: کلید GEMINI_API_KEY در تنظیمات Render یافت نشد."
     try:
         model = genai.GenerativeModel("gemini-1.5-flash")
         response = model.generate_content(user_text)
@@ -43,7 +43,7 @@ def ask_gemini(user_text: str) -> str:
     except Exception as e:
         return f"خطای جمینای: {str(e)}"
 
-# Image Prompt Translator
+# ساخت پرامپت انگلیسی برای تصویر
 def generate_ai_image_prompt(user_text: str) -> str:
     try:
         model = genai.GenerativeModel("gemini-1.5-flash")
@@ -57,7 +57,7 @@ def generate_ai_image_prompt(user_text: str) -> str:
     except Exception:
         return user_text
 
-# Free Image Generation Helper
+# دریافت تصویر از Pollinations AI
 def create_ai_image(prompt: str):
     try:
         encoded_prompt = urllib.parse.quote(prompt)
@@ -69,13 +69,13 @@ def create_ai_image(prompt: str):
     except Exception:
         return None
 
-# Telegram Command: /start
+# دستور /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "سلام! من ربات الکس هستم.\nمی‌توانید از من سوال بپرسید یا برای دریافت عکس، متنی مثل «عکس یک گربه» ارسال کنید."
     )
 
-# Telegram Message Handler
+# پردازش پیام‌های کاربران
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     user_text = update.message.text
@@ -105,9 +105,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ai_reply = ask_gemini(user_text)
     await update.message.reply_text(ai_reply)
 
-# Main Entry Point
 if __name__ == '__main__':
-    # Start background web server for Render
     threading.Thread(target=run_flask, daemon=True).start()
 
     if not TELEGRAM_TOKEN:
