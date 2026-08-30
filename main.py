@@ -1,7 +1,6 @@
 import os
 import threading
 from flask import Flask
-
 import requests
 import io
 import urllib.parse
@@ -24,7 +23,7 @@ def run_flask():
 # ==========================================
 # تنظیمات کلیدها
 TELEGRAM_TOKEN = '8997663787:AAFIZU23Y-W-66Jx0MR2yMosAALvy5kX0NU'
-GEMINI_API_KEY = 'AQ.Ab8RN6IPLOJ53K0xCXXL6oxhB6k59Ij...'
+GEMINI_API_KEY = 'AQ.Ab8RN6IPLOJ53K0xCXxL6oxhB6k59ljptajaB-HB5jyujjKoAg'
 # ==========================================
 
 system_prompt = (
@@ -33,13 +32,13 @@ system_prompt = (
 )
 
 def ask_gemini(user_text):
-    # انکود کردن کلید برای جلوگیری از خطای کاراکترهای خاص
     clean_key = GEMINI_API_KEY.strip().encode('ascii', 'ignore').decode('ascii')
     gemini_url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
 
+    # استفاده از ساختار Bearer برای توکن‌های AQ
     headers = {
         'Content-Type': 'application/json',
-        'x-goog-api-key': clean_key
+        'Authorization': f'Bearer {clean_key}'
     }
     payload = {
         "contents": [{"parts": [{"text": user_text}]}],
@@ -69,7 +68,7 @@ def generate_ai_image_prompt(user_text):
 
     headers = {
         'Content-Type': 'application/json',
-        'x-goog-api-key': clean_key
+        'Authorization': f'Bearer {clean_key}'
     }
     payload = {
         "contents": [{"parts": [{"text": user_text}]}],
