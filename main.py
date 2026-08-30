@@ -24,9 +24,7 @@ def run_flask():
 # ==========================================
 # تنظیمات کلیدها
 TELEGRAM_TOKEN = '8997663787:AAFIZU23Y-W-66Jx0MR2yMosAALvy5kX0NU'
-
-# کلید کامل کپی‌شده از AI Studio را اینجا بگذارید
-GEMINI_API_KEY = 'کلید_کامل_جدید_شما'
+GEMINI_API_KEY = 'AQ.Ab8RN6IPLOJ53K0xCXXL6oxhB6k59Ij...'
 # ==========================================
 
 system_prompt = (
@@ -35,10 +33,10 @@ system_prompt = (
 )
 
 def ask_gemini(user_text):
-    clean_key = GEMINI_API_KEY.strip()
+    # انکود کردن کلید برای جلوگیری از خطای کاراکترهای خاص
+    clean_key = GEMINI_API_KEY.strip().encode('ascii', 'ignore').decode('ascii')
     gemini_url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
 
-    # ارسال کلید در Header برای پشتیبانی از فرمت جدید AQ
     headers = {
         'Content-Type': 'application/json',
         'x-goog-api-key': clean_key
@@ -61,7 +59,7 @@ def ask_gemini(user_text):
         return f"خطا در ارتباط با سرور: {str(e)}"
 
 def generate_ai_image_prompt(user_text):
-    clean_key = GEMINI_API_KEY.strip()
+    clean_key = GEMINI_API_KEY.strip().encode('ascii', 'ignore').decode('ascii')
     gemini_url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
 
     prompt_instruction = (
