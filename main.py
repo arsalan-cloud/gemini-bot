@@ -4,7 +4,6 @@ from flask import Flask
 
 import requests
 import io
-import re
 import urllib.parse
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
@@ -25,7 +24,9 @@ def run_flask():
 # ==========================================
 # تنظیمات کلیدها
 TELEGRAM_TOKEN = '8997663787:AAFIZU23Y-W-66Jx0MR2yMosAALvy5kX0NU'
-GEMINI_API_KEY = 'AQ.Ab8RN6I35jDYMyVQBsmtOEAjsUd5GtIuPuPk6QYlO5hVGwT2QQ'
+
+# کلید کامل کپی‌شده از AI Studio را اینجا بگذارید
+GEMINI_API_KEY = 'کلید_کامل_جدید_شما'
 # ==========================================
 
 system_prompt = (
@@ -37,6 +38,7 @@ def ask_gemini(user_text):
     clean_key = GEMINI_API_KEY.strip()
     gemini_url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
 
+    # ارسال کلید در Header برای پشتیبانی از فرمت جدید AQ
     headers = {
         'Content-Type': 'application/json',
         'x-goog-api-key': clean_key
@@ -59,14 +61,12 @@ def ask_gemini(user_text):
         return f"خطا در ارتباط با سرور: {str(e)}"
 
 def generate_ai_image_prompt(user_text):
-    """تبدیل درخواست فارسی کاربر به یک پرامپت حرفه‌ای انگلیسی برای تولید تصویر"""
     clean_key = GEMINI_API_KEY.strip()
     gemini_url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
 
     prompt_instruction = (
         "Translate and enhance the following user request into a detailed English image generation prompt. "
-        "Output ONLY the final English prompt string, without any additional explanations, quotes, or conversational text. "
-        "Example output: A highly detailed cinematic photo of a Persian cat sitting on a futuristic desk, 8k resolution."
+        "Output ONLY the final English prompt string, without any additional explanations, quotes, or conversational text."
     )
 
     headers = {
@@ -88,7 +88,6 @@ def generate_ai_image_prompt(user_text):
     return user_text
 
 def create_ai_image(prompt_en):
-    """تولید تصویر با هوش مصنوعی قدرتمند Flux / Pollinations"""
     encoded_prompt = urllib.parse.quote(prompt_en)
     image_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1024&height=1024&nologo=true&model=flux"
 
@@ -109,7 +108,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text_lower = user_text.lower()
 
     image_keywords = ['عکس', 'تصویر', 'بساظ', 'بفرست', 'خلق کن', 'بکش', 'طراحی کن']
-
     is_question = any(q in text_lower for q in ['میتونی', 'می‌توانی', 'آیا', 'ایا', 'چرا', 'چطور', 'چگونه', 'ادیت', 'ویرایش'])
     wants_image = any(kw in text_lower for kw in image_keywords) and not is_question
 
@@ -134,12 +132,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(ai_reply)
 
 if __name__ == '__main__':
-    # راه اندازی وب‌سرور برای Render
     threading.Thread(target=run_flask, daemon=True).start()
 
-    # اجرای اصلی ربات تلگرام
     app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
     app.add_handler(CommandHandler('start', start))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    print('ربات جمینای + هوش مصنوعی تولید تصویر فعال شد...')
     app.run_polling()
