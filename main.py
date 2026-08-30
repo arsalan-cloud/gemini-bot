@@ -35,9 +35,12 @@ system_prompt = (
 
 def ask_gemini(user_text):
     clean_key = GEMINI_API_KEY.strip()
-    gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key={clean_key}"
+    gemini_url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
 
-    headers = {'Content-Type': 'application/json'}
+    headers = {
+        'Content-Type': 'application/json',
+        'x-goog-api-key': clean_key
+    }
     payload = {
         "contents": [{"parts": [{"text": user_text}]}],
         "systemInstruction": {"parts": [{"text": system_prompt}]}
@@ -58,7 +61,7 @@ def ask_gemini(user_text):
 def generate_ai_image_prompt(user_text):
     """تبدیل درخواست فارسی کاربر به یک پرامپت حرفه‌ای انگلیسی برای تولید تصویر"""
     clean_key = GEMINI_API_KEY.strip()
-    gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key={clean_key}"
+    gemini_url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
 
     prompt_instruction = (
         "Translate and enhance the following user request into a detailed English image generation prompt. "
@@ -66,7 +69,10 @@ def generate_ai_image_prompt(user_text):
         "Example output: A highly detailed cinematic photo of a Persian cat sitting on a futuristic desk, 8k resolution."
     )
 
-    headers = {'Content-Type': 'application/json'}
+    headers = {
+        'Content-Type': 'application/json',
+        'x-goog-api-key': clean_key
+    }
     payload = {
         "contents": [{"parts": [{"text": user_text}]}],
         "systemInstruction": {"parts": [{"text": prompt_instruction}]}
@@ -131,7 +137,7 @@ if __name__ == '__main__':
     # راه اندازی وب‌سرور برای Render
     threading.Thread(target=run_flask, daemon=True).start()
 
-    # اجرای اصلی ربات تلگرام دقیقاً مانند ترموکس
+    # اجرای اصلی ربات تلگرام
     app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
     app.add_handler(CommandHandler('start', start))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
