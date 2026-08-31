@@ -1,4 +1,3 @@
-  
 import os
 import threading
 import logging
@@ -15,8 +14,7 @@ from telegram.ext import (
     filters,
 )
 
-from google import genai
-
+import google.generativeai as genai
 
 # =========================================================
 # LOGGING
@@ -49,13 +47,13 @@ if not TELEGRAM_TOKEN:
 
 
 # =========================================================
-# GEMINI CLIENT
+# GEMINI CLIENT (STABLE SDK)
 # =========================================================
 
 try:
-    ai_client = genai.Client(
-        api_key=GEMINI_API_KEY
-    )
+    # حذف فواصل خالی احتمالی برای جلوگیری از خطای ۴۰۱
+    genai.configure(api_key=GEMINI_API_KEY.strip())
+    gemini_model = genai.GenerativeModel("gemini-1.5-flash")
 
     logger.info("Gemini client initialized successfully.")
 
@@ -100,18 +98,10 @@ def ask_gemini(user_text: str) -> str:
 
     try:
 
-        response = ai_client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=user_text,
-        )
+        response = gemini_model.generate_content(user_text)
 
-        if response is None:
-            return "متأسفانه Gemini پاسخی برنگرداند."
-
-        text = getattr(response, "text", None)
-
-        if text:
-            return text.strip()
+        if response and getattr(response, "text", None):
+            return response.text.strip()
 
         return "متأسفانه پاسخی از Gemini دریافت نشد."
 
@@ -124,12 +114,12 @@ def ask_gemini(user_text: str) -> str:
             error_text,
         )
 
-        if "401" in error_text or "UNAUTHENTICATED" in error_text:
+        if "401" in error_text or "UNAUTHENTICATED" in error_text or "API_KEY_INVALID" in error_text:
 
             return (
                 "❌ خطا در احراز هویت Gemini.\n\n"
-                "کلید GEMINI_API_KEY در Google AI Studio "
-                "یا تنظیمات Render را بررسی کنید."
+                "کلید GEMINI_API_KEY در تنظیمات Render را بررسی کنید "
+                "و مطمئن شوید کلید معتبر از Google AI Studio وارد شده است."
             )
 
         if "429" in error_text:
@@ -167,15 +157,10 @@ Persian request:
 
     try:
 
-        response = ai_client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=instruction,
-        )
+        response = gemini_model.generate_content(instruction)
 
-        text = getattr(response, "text", None)
-
-        if text:
-            return text.strip()
+        if response and getattr(response, "text", None):
+            return response.text.strip()
 
         return user_text
 
@@ -186,8 +171,6 @@ Persian request:
             str(e),
         )
 
-        # اگر Gemini برای ترجمه در دسترس نبود،
-        # خود متن کاربر را برای Pollinations می‌فرستیم.
         return user_text
 
 
@@ -352,13 +335,11 @@ async def handle_message(
             )
 
 
-            # Translate Persian prompt to English
             en_prompt = generate_ai_image_prompt(
                 user_text
             )
 
 
-            # Generate image
             image_bytes = create_ai_image(
                 en_prompt
             )
@@ -435,7 +416,6 @@ def main():
     logger.info("Starting Alex Ai Telegram Bot...")
 
 
-    # Start Flask server for Render
     flask_thread = threading.Thread(
         target=run_flask,
         daemon=True,
@@ -444,7 +424,6 @@ def main():
     flask_thread.start()
 
 
-    # Create Telegram application
     app = (
         ApplicationBuilder()
         .token(TELEGRAM_TOKEN)
@@ -452,7 +431,6 @@ def main():
     )
 
 
-    # Commands
     app.add_handler(
         CommandHandler(
             "start",
@@ -461,7 +439,6 @@ def main():
     )
 
 
-    # Text messages
     app.add_handler(
         MessageHandler(
             filters.TEXT & ~filters.COMMAND,
