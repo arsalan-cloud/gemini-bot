@@ -14,7 +14,6 @@ from telegram.ext import (
     ContextTypes,
     filters,
 )
-import google.generativeai as genai
 
 # =========================================================
 # LOGGING
@@ -47,19 +46,6 @@ if not TELEGRAM_TOKEN:
 
 
 # =========================================================
-# GEMINI CLIENT
-# =========================================================
-
-try:
-    genai.configure(api_key=GEMINI_API_KEY.strip())
-    gemini_model = genai.GenerativeModel("gemini-1.5-flash")
-    logger.info("Gemini client initialized successfully.")
-except Exception as e:
-    logger.exception("Failed to initialize Gemini client.")
-    raise
-
-
-# =========================================================
 # FLASK SERVER FOR RENDER
 # =========================================================
 
@@ -87,37 +73,52 @@ def run_flask():
 
 
 # =========================================================
-# GEMINI TEXT GENERATION
+# GEMINI DIRECT REST API CALL
 # =========================================================
 
-def _ask_gemini_sync(user_text: str) -> str:
+def _call_gemini_api(prompt_text: str) -> str:
+    api_key = GEMINI_API_KEY.strip()
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
+    
+    headers = {"Content-Type": "application/json"}
+    payload = {
+        "contents": [
+            {
+                "parts": [{"text": prompt_text}]
+            }
+        ]
+    }
+
     try:
-        response = gemini_model.generate_content(user_text)
-
-        if response and getattr(response, "text", None):
-            return response.text.strip()
-
-        return "متأسفانه پاسخی از Gemini دریافت نشد."
-
-    except Exception as e:
-        error_text = str(e)
-        logger.error("Gemini API error: %s", error_text)
-
-        if "401" in error_text or "UNAUTHENTICATED" in error_text or "API_KEY_INVALID" in error_text:
+        response = requests.post(url, json=payload, headers=headers, timeout=30)
+        
+        if response.status_code == 200:
+            data = response.json()
+            try:
+                return data["candidates"][0]["content"]["parts"][0]["text"].strip()
+            except (KeyError, IndexError):
+                return "متأسفانه پاسخی از Gemini دریافت نشد."
+        
+        logger.error("Gemini REST API error (%s): %s", response.status_code, response.text)
+        
+        if response.status_code == 401:
             return (
                 "❌ خطا در احراز هویت Gemini.\n\n"
-                "کلید GEMINI_API_KEY در تنظیمات Render را بررسی کنید "
-                "و مطمئن شوید کلید معتبر از Google AI Studio وارد شده است."
+                "کلید GEMINI_API_KEY در تنظیمات Render را بررسی کنید."
             )
-
-        if "429" in error_text:
+        
+        if response.status_code == 429:
             return "⏳ تعداد درخواست‌های Gemini زیاد شده است. لطفاً چند لحظه بعد دوباره امتحان کنید."
-
+        
         return "❌ در ارتباط با Gemini خطایی رخ داد. لطفاً چند لحظه بعد دوباره امتحان کنید."
+
+    except Exception as e:
+        logger.error("HTTP Request Exception: %s", str(e))
+        return "❌ خطا در برقراری ارتباط شبکه."
 
 
 async def ask_gemini(user_text: str) -> str:
-    return await asyncio.to_thread(_ask_gemini_sync, user_text)
+    return await asyncio.to_thread(_call_gemini_api, user_text)
 
 
 # =========================================================
@@ -138,17 +139,10 @@ Requirements:
 Persian request:
 {user_text}
 """
-    try:
-        response = gemini_model.generate_content(instruction)
-
-        if response and getattr(response, "text", None):
-            return response.text.strip()
-
+    res = _call_gemini_api(instruction)
+    if res.startswith("❌") or res.startswith("⏳"):
         return user_text
-
-    except Exception as e:
-        logger.error("Image prompt generation error: %s", str(e))
-        return user_text
+    return res
 
 
 async def generate_ai_image_prompt(user_text: str) -> str:
