@@ -14,8 +14,7 @@ from telegram.ext import (
     ContextTypes,
     filters,
 )
-
-import google.generativeai as genai
+from google import genai
 
 # =========================================================
 # LOGGING
@@ -48,15 +47,12 @@ if not TELEGRAM_TOKEN:
 
 
 # =========================================================
-# GEMINI CLIENT (STABLE SDK)
+# GEMINI CLIENT (OFFICIAL SDK)
 # =========================================================
 
 try:
-    genai.configure(api_key=GEMINI_API_KEY.strip())
-    gemini_model = genai.GenerativeModel("gemini-1.5-flash")
-
+    gemini_client = genai.Client(api_key=GEMINI_API_KEY.strip())
     logger.info("Gemini client initialized successfully.")
-
 except Exception as e:
     logger.exception("Failed to initialize Gemini client.")
     raise
@@ -81,7 +77,6 @@ def health():
 
 def run_flask():
     port = int(os.getenv("PORT", "10000"))
-
     flask_app.run(
         host="0.0.0.0",
         port=port,
@@ -94,11 +89,12 @@ def run_flask():
 # GEMINI TEXT GENERATION
 # =========================================================
 
-def ask_gemini(user_text: str) -> str:
-
+def _ask_gemini_sync(user_text: str) -> str:
     try:
-
-        response = gemini_model.generate_content(user_text)
+        response = gemini_client.models.generate_content(
+            model="gemini-1.5-flash",
+            contents=user_text,
+        )
 
         if response and getattr(response, "text", None):
             return response.text.strip()
@@ -106,16 +102,10 @@ def ask_gemini(user_text: str) -> str:
         return "متأسفانه پاسخی از Gemini دریافت نشد."
 
     except Exception as e:
-
         error_text = str(e)
-
-        logger.error(
-            "Gemini API error: %s",
-            error_text,
-        )
+        logger.error("Gemini API error: %s", error_text)
 
         if "401" in error_text or "UNAUTHENTICATED" in error_text or "API_KEY_INVALID" in error_text:
-
             return (
                 "❌ خطا در احراز هویت Gemini.\n\n"
                 "کلید GEMINI_API_KEY در تنظیمات Render را بررسی کنید "
@@ -123,24 +113,20 @@ def ask_gemini(user_text: str) -> str:
             )
 
         if "429" in error_text:
+            return "⏳ تعداد درخواست‌های Gemini زیاد شده است. لطفاً چند لحظه بعد دوباره امتحان کنید."
 
-            return (
-                "⏳ تعداد درخواست‌های Gemini زیاد شده است. "
-                "لطفاً چند لحظه بعد دوباره امتحان کنید."
-            )
+        return "❌ در ارتباط با Gemini خطایی رخ داد. لطفاً چند لحظه بعد دوباره امتحان کنید."
 
-        return (
-            "❌ در ارتباط با Gemini خطایی رخ داد.\n"
-            "لطفاً چند لحظه بعد دوباره امتحان کنید."
-        )
+
+async def ask_gemini(user_text: str) -> str:
+    return await asyncio.to_thread(_ask_gemini_sync, user_text)
 
 
 # =========================================================
 # TRANSLATE IMAGE PROMPT
 # =========================================================
 
-def generate_ai_image_prompt(user_text: str) -> str:
-
+def _generate_ai_image_prompt_sync(user_text: str) -> str:
     instruction = f"""
 Translate and improve the following Persian request into a
 high-quality English prompt for an AI image generator.
@@ -154,10 +140,11 @@ Requirements:
 Persian request:
 {user_text}
 """
-
     try:
-
-        response = gemini_model.generate_content(instruction)
+        response = gemini_client.models.generate_content(
+            model="gemini-1.5-flash",
+            contents=instruction,
+        )
 
         if response and getattr(response, "text", None):
             return response.text.strip()
@@ -165,77 +152,51 @@ Persian request:
         return user_text
 
     except Exception as e:
-
-        logger.error(
-            "Image prompt generation error: %s",
-            str(e),
-        )
-
+        logger.error("Image prompt generation error: %s", str(e))
         return user_text
+
+
+async def generate_ai_image_prompt(user_text: str) -> str:
+    return await asyncio.to_thread(_generate_ai_image_prompt_sync, user_text)
 
 
 # =========================================================
 # IMAGE GENERATION
 # =========================================================
 
-def create_ai_image(prompt: str):
-
+def _create_ai_image_sync(prompt: str):
     try:
-
-        encoded_prompt = urllib.parse.quote(
-            prompt,
-            safe="",
-        )
-
-        url = (
-            "https://image.pollinations.ai/prompt/"
-            + encoded_prompt
-        )
+        encoded_prompt = urllib.parse.quote(prompt, safe="")
+        url = f"https://image.pollinations.ai/prompt/{encoded_prompt}"
 
         response = requests.get(
             url,
             timeout=60,
-            headers={
-                "User-Agent": "AlexAiTelegramBot/1.0"
-            },
+            headers={"User-Agent": "AlexAiTelegramBot/1.0"},
         )
 
         if response.status_code == 200:
-
-            content_type = response.headers.get(
-                "Content-Type",
-                "",
-            )
-
+            content_type = response.headers.get("Content-Type", "")
             if content_type.startswith("image/"):
                 return response.content
 
-        logger.error(
-            "Image API returned status %s",
-            response.status_code,
-        )
-
+        logger.error("Image API returned status %s", response.status_code)
         return None
 
     except Exception as e:
-
-        logger.error(
-            "Image generation error: %s",
-            str(e),
-        )
-
+        logger.error("Image generation error: %s", str(e))
         return None
+
+
+async def create_ai_image(prompt: str):
+    return await asyncio.to_thread(_create_ai_image_sync, prompt)
 
 
 # =========================================================
 # /START COMMAND
 # =========================================================
 
-async def start(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE,
-):
-
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message:
         return
 
@@ -252,159 +213,66 @@ async def start(
 # TELEGRAM MESSAGE HANDLER
 # =========================================================
 
-async def handle_message(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE,
-):
-
-    if not update.message:
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.message or not update.message.text:
         return
 
-    user_text = update.message.text
-
-    if not user_text:
-        return
-
-    user_text = user_text.strip()
-
+    user_text = update.message.text.strip()
     if not user_text:
         return
 
     chat_id = update.effective_chat.id
-
     text_lower = user_text.lower()
 
-
-    # =====================================================
-    # IMAGE KEYWORDS
-    # =====================================================
-
     image_keywords = [
-        "عکس",
-        "تصویر",
-        "بساز",
-        "خلق کن",
-        "بکش",
-        "طراحی کن",
-        "تصویرسازی",
-        "عکس بساز",
-        "تصویر بساز",
+        "عکس", "تصویر", "بساز", "خلق کن", "بکش", 
+        "طراحی کن", "تصویرسازی", "عکس بساز", "تصویر بساز"
     ]
-
 
     question_keywords = [
-        "میتونی",
-        "می‌تونی",
-        "می‌توانی",
-        "میتوانی",
-        "آیا",
-        "ایا",
-        "چرا",
-        "چطور",
-        "چگونه",
-        "ادیت",
-        "ویرایش",
+        "میتونی", "می‌تونی", "می‌توانی", "میتوانی", 
+        "آیا", "ایا", "چرا", "چطور", "چگونه", "ادیت", "ویرایش"
     ]
-
 
     wants_image = (
         any(word in text_lower for word in image_keywords)
-        and not any(
-            word in text_lower
-            for word in question_keywords
-        )
+        and not any(word in text_lower for word in question_keywords)
     )
 
-
-    # =====================================================
-    # IMAGE REQUEST
-    # =====================================================
-
     if wants_image:
-
         try:
-
-            await context.bot.send_chat_action(
-                chat_id=chat_id,
-                action="upload_photo",
-            )
-
+            await context.bot.send_chat_action(chat_id=chat_id, action="upload_photo")
             await update.message.reply_text(
-                "🎨 در حال آماده‌سازی تصویر شما...\n"
-                "لطفاً کمی صبر کنید."
+                "🎨 در حال آماده‌سازی تصویر شما...\nلطفاً کمی صبر کنید."
             )
 
-
-            en_prompt = generate_ai_image_prompt(
-                user_text
-            )
-
-
-            image_bytes = create_ai_image(
-                en_prompt
-            )
-
+            en_prompt = await generate_ai_image_prompt(user_text)
+            image_bytes = await create_ai_image(en_prompt)
 
             if image_bytes:
-
                 await update.message.reply_photo(
                     photo=image_bytes,
-                    caption=(
-                        "✨ تصویر شما آماده شد!\n\n"
-                        f"📝 Prompt:\n{en_prompt}"
-                    ),
+                    caption=f"✨ تصویر شما آماده شد!\n\n📝 Prompt:\n{en_prompt}",
                 )
-
             else:
-
                 await update.message.reply_text(
-                    "❌ متأسفانه ساخت تصویر انجام نشد.\n"
-                    "لطفاً دوباره امتحان کنید."
+                    "❌ متأسفانه ساخت تصویر انجام نشد.\nلطفاً دوباره امتحان کنید."
                 )
 
         except Exception as e:
-
-            logger.exception(
-                "Image request failed: %s",
-                str(e),
-            )
-
-            await update.message.reply_text(
-                "❌ هنگام ساخت تصویر خطایی رخ داد."
-            )
+            logger.exception("Image request failed: %s", str(e))
+            await update.message.reply_text("❌ هنگام ساخت تصویر خطایی رخ داد.")
 
         return
 
-
-    # =====================================================
-    # NORMAL AI CHAT
-    # =====================================================
-
     try:
-
-        await context.bot.send_chat_action(
-            chat_id=chat_id,
-            action="typing",
-        )
-
-        ai_reply = ask_gemini(
-            user_text
-        )
-
-        await update.message.reply_text(
-            ai_reply
-        )
+        await context.bot.send_chat_action(chat_id=chat_id, action="typing")
+        ai_reply = await ask_gemini(user_text)
+        await update.message.reply_text(ai_reply)
 
     except Exception as e:
-
-        logger.exception(
-            "Message handling error: %s",
-            str(e),
-        )
-
-        await update.message.reply_text(
-            "❌ خطایی رخ داد. لطفاً دوباره امتحان کنید."
-        )
+        logger.exception("Message handling error: %s", str(e))
+        await update.message.reply_text("❌ خطایی رخ داد. لطفاً دوباره امتحان کنید.")
 
 
 # =========================================================
@@ -412,51 +280,21 @@ async def handle_message(
 # =========================================================
 
 def main():
-
     logger.info("Starting Alex Ai Telegram Bot...")
 
-    flask_thread = threading.Thread(
-        target=run_flask,
-        daemon=True,
-    )
-
+    flask_thread = threading.Thread(target=run_flask, daemon=True)
     flask_thread.start()
 
-    app = (
-        ApplicationBuilder()
-        .token(TELEGRAM_TOKEN)
-        .build()
-    )
+    app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
 
-    app.add_handler(
-        CommandHandler(
-            "start",
-            start,
-        )
-    )
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-    app.add_handler(
-        MessageHandler(
-            filters.TEXT & ~filters.COMMAND,
-            handle_message,
-        )
-    )
+    logger.info("Telegram bot is starting polling...")
+    app.run_polling(drop_pending_updates=True)
 
-    logger.info(
-        "Telegram bot is starting polling..."
-    )
-
-    app.run_polling(
-        drop_pending_updates=True
-    )
-
-
-# =========================================================
-# RUN
-# =========================================================
 
 if __name__ == "__main__":
-    # ایجاد دستی Event Loop برای پایتون ۳.۱۰ به بالا
     try:
         loop = asyncio.get_event_loop()
     except RuntimeError:
