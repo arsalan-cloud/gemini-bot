@@ -78,9 +78,13 @@ def run_flask():
 
 def _call_gemini_api(prompt_text: str) -> str:
     api_key = GEMINI_API_KEY.strip()
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
+    url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
     
-    headers = {"Content-Type": "application/json"}
+    headers = {
+        "Content-Type": "application/json",
+        "x-goog-api-key": api_key
+    }
+    
     payload = {
         "contents": [
             {
@@ -104,7 +108,8 @@ def _call_gemini_api(prompt_text: str) -> str:
         if response.status_code == 401:
             return (
                 "❌ خطا در احراز هویت Gemini.\n\n"
-                "کلید GEMINI_API_KEY در تنظیمات Render را بررسی کنید."
+                "کلید GEMINI_API_KEY غیرفعال است یا دسترسی ندارد. "
+                "لطفاً یک کلید در پروژه جدید (Create API key in new project) بسازید."
             )
         
         if response.status_code == 429:
