@@ -1,4 +1,5 @@
 import os
+import asyncio
 import threading
 import logging
 import urllib.parse
@@ -51,7 +52,6 @@ if not TELEGRAM_TOKEN:
 # =========================================================
 
 try:
-    # حذف فواصل خالی احتمالی برای جلوگیری از خطای ۴۰۱
     genai.configure(api_key=GEMINI_API_KEY.strip())
     gemini_model = genai.GenerativeModel("gemini-1.5-flash")
 
@@ -415,7 +415,6 @@ def main():
 
     logger.info("Starting Alex Ai Telegram Bot...")
 
-
     flask_thread = threading.Thread(
         target=run_flask,
         daemon=True,
@@ -423,13 +422,11 @@ def main():
 
     flask_thread.start()
 
-
     app = (
         ApplicationBuilder()
         .token(TELEGRAM_TOKEN)
         .build()
     )
-
 
     app.add_handler(
         CommandHandler(
@@ -438,7 +435,6 @@ def main():
         )
     )
 
-
     app.add_handler(
         MessageHandler(
             filters.TEXT & ~filters.COMMAND,
@@ -446,11 +442,9 @@ def main():
         )
     )
 
-
     logger.info(
         "Telegram bot is starting polling..."
     )
-
 
     app.run_polling(
         drop_pending_updates=True
@@ -462,4 +456,11 @@ def main():
 # =========================================================
 
 if __name__ == "__main__":
+    # ایجاد دستی Event Loop برای پایتون ۳.۱۰ به بالا
+    try:
+        loop = asyncio.get_event_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
     main()
