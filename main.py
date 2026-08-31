@@ -16,15 +16,15 @@ from google import genai
 # ==========================================
 # 🔑 تنظیم کلیدها
 # ==========================================
-# کلید API خود (شروع با AIzaSy) را اینجا قرار دهید:
+# کلید شروع شونده با AIzaSy را اینج
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "AQ.Ab8RN6KXG9t1MuvZKzJRG1HR6GTsHmF7a8n5O0_5ZDq_Oz5rxw")
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "8997663787:AAFIZU23Y-W-66Jx0MR2yMosAALvy5kX0NU")
 # ==========================================
 
-# ساخت کلاینت طبق مستندات جدید گوگل
+# ساخت کلاینت هوش مصنوعی
 ai_client = genai.Client(api_key=GEMINI_API_KEY)
 
-# وب‌سرور Flask برای زنده نگه داشتن سرویس در Render
+# وب‌سرور Flask برای Render
 flask_app = Flask(__name__)
 
 @flask_app.route('/')
@@ -35,14 +35,14 @@ def run_flask():
     port = int(os.getenv("PORT", 10000))
     flask_app.run(host="0.0.0.0", port=port)
 
-# پاسخ‌دهی متنی با Interactions API و مدل gemini-3.7-flash
+# پاسخ‌دهی متنی استاندارد با API Key
 def ask_gemini(user_text: str) -> str:
     try:
-        interaction = ai_client.interactions.create(
-            model="gemini-3.7-flash",
-            input=user_text
+        response = ai_client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=user_text
         )
-        return interaction.output_text
+        return response.text
     except Exception as e:
         return f"خطای جمینای: {str(e)}"
 
@@ -54,11 +54,11 @@ def generate_ai_image_prompt(user_text: str) -> str:
         f"Output ONLY the English prompt without any extra explanation: {user_text}"
     )
     try:
-        interaction = ai_client.interactions.create(
-            model="gemini-3.7-flash",
-            input=prompt_instruction
+        response = ai_client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=prompt_instruction
         )
-        return interaction.output_text.strip()
+        return response.text.strip()
     except Exception:
         return user_text
 
