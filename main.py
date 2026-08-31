@@ -13,8 +13,8 @@ from telegram.ext import (
 )
 
 # خواندن متغیرها از Render و در صورت عدم وجود، استفاده از توکن‌های شما
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "8997663787:AAFIZU23Y-W-66Jx0MR2yMosAALvy5kX0NU")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "AQ.Ab8RN6KXG9t1MuvZKzJRG1HR6GTsHmF7a8n5O0_5ZDq_Oz5rxw")
+TELEGRAM_TOKEN = os.getenv("8997663787:AAFIZU23Y-W-66Jx0MR2yMosAALvy5kX0NU")
+GEMINI_API_KEY = os.getenv("AQ.Ab8RN6KXG9t1MuvZKzJRG1HR6GTsHmF7a8n5O0_5ZDq_Oz5rxw")
 
 # وب‌سرور Flask برای زنده نگه داشتن سرویس در Render
 flask_app = Flask(__name__)
