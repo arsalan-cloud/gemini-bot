@@ -14,7 +14,7 @@ from telegram.ext import (
     ContextTypes,
     filters,
 )
-from google import genai
+import google.generativeai as genai
 
 # =========================================================
 # LOGGING
@@ -47,11 +47,12 @@ if not TELEGRAM_TOKEN:
 
 
 # =========================================================
-# GEMINI CLIENT (OFFICIAL SDK)
+# GEMINI CLIENT
 # =========================================================
 
 try:
-    gemini_client = genai.Client(api_key=GEMINI_API_KEY.strip())
+    genai.configure(api_key=GEMINI_API_KEY.strip())
+    gemini_model = genai.GenerativeModel("gemini-1.5-flash")
     logger.info("Gemini client initialized successfully.")
 except Exception as e:
     logger.exception("Failed to initialize Gemini client.")
@@ -91,10 +92,7 @@ def run_flask():
 
 def _ask_gemini_sync(user_text: str) -> str:
     try:
-        response = gemini_client.models.generate_content(
-            model="gemini-1.5-flash",
-            contents=user_text,
-        )
+        response = gemini_model.generate_content(user_text)
 
         if response and getattr(response, "text", None):
             return response.text.strip()
@@ -141,10 +139,7 @@ Persian request:
 {user_text}
 """
     try:
-        response = gemini_client.models.generate_content(
-            model="gemini-1.5-flash",
-            contents=instruction,
-        )
+        response = gemini_model.generate_content(instruction)
 
         if response and getattr(response, "text", None):
             return response.text.strip()
