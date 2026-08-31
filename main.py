@@ -1,120 +1,488 @@
+  
 import os
 import threading
+import logging
 import urllib.parse
 import requests
+
 from flask import Flask
 from telegram import Update
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
     MessageHandler,
-    filters,
     ContextTypes,
+    filters,
 )
+
 from google import genai
 
-# ==========================================
-# 🔑 تنظیم کلیدها
-# ==========================================
-# کلید شروع شونده با AIzaSy را اینج
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "AQ.Ab8RN6KXG9t1MuvZKzJRG1HR6GTsHmF7a8n5O0_5ZDq_Oz5rxw")
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "8997663787:AAFIZU23Y-W-66Jx0MR2yMosAALvy5kX0NU")
-# ==========================================
 
-# ساخت کلاینت هوش مصنوعی
-ai_client = genai.Client(api_key=GEMINI_API_KEY)
+# =========================================================
+# LOGGING
+# =========================================================
 
-# وب‌سرور Flask برای Render
+logging.basicConfig(
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    level=logging.INFO,
+)
+
+logger = logging.getLogger(__name__)
+
+
+# =========================================================
+# ENVIRONMENT VARIABLES
+# =========================================================
+
+GEMINI_API_KEY = os.getenv("AQ.Ab8RN6KXG9t1MuvZKzJRG1HR6GTsHmF7a8n5O0_5ZDq_Oz5rxw")
+TELEGRAM_TOKEN = os.getenv("8997663787:AAFIZU23Y-W-66Jx0MR2yMosAALvy5kX0NU")
+
+if not GEMINI_API_KEY:
+    raise RuntimeError(
+        "GEMINI_API_KEY is not configured in Render Environment Variables."
+    )
+
+if not TELEGRAM_TOKEN:
+    raise RuntimeError(
+        "TELEGRAM_TOKEN is not configured in Render Environment Variables."
+    )
+
+
+# =========================================================
+# GEMINI CLIENT
+# =========================================================
+
+try:
+    ai_client = genai.Client(
+        api_key=GEMINI_API_KEY
+    )
+
+    logger.info("Gemini client initialized successfully.")
+
+except Exception as e:
+    logger.exception("Failed to initialize Gemini client.")
+    raise
+
+
+# =========================================================
+# FLASK SERVER FOR RENDER
+# =========================================================
+
 flask_app = Flask(__name__)
 
-@flask_app.route('/')
+
+@flask_app.route("/")
 def home():
-    return "Bot is running live!"
+    return "Alex Ai Bot is running."
+
+
+@flask_app.route("/health")
+def health():
+    return "OK"
+
 
 def run_flask():
-    port = int(os.getenv("PORT", 10000))
-    flask_app.run(host="0.0.0.0", port=port)
+    port = int(os.getenv("PORT", "10000"))
 
-# پاسخ‌دهی متنی استاندارد با API Key
-def ask_gemini(user_text: str) -> str:
-    try:
-        response = ai_client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=user_text
-        )
-        return response.text
-    except Exception as e:
-        return f"خطای جمینای: {str(e)}"
-
-# ترجمه متن فارسی به پرامپت انگلیسی برای تصویر
-def generate_ai_image_prompt(user_text: str) -> str:
-    prompt_instruction = (
-        "Translate and refine the following Persian user input into a concise, "
-        "detailed English prompt suitable for an AI image generator. "
-        f"Output ONLY the English prompt without any extra explanation: {user_text}"
+    flask_app.run(
+        host="0.0.0.0",
+        port=port,
+        debug=False,
+        use_reloader=False,
     )
+
+
+# =========================================================
+# GEMINI TEXT GENERATION
+# =========================================================
+
+def ask_gemini(user_text: str) -> str:
+
     try:
+
         response = ai_client.models.generate_content(
             model="gemini-2.5-flash",
-            contents=prompt_instruction
+            contents=user_text,
         )
-        return response.text.strip()
-    except Exception:
+
+        if response is None:
+            return "متأسفانه Gemini پاسخی برنگرداند."
+
+        text = getattr(response, "text", None)
+
+        if text:
+            return text.strip()
+
+        return "متأسفانه پاسخی از Gemini دریافت نشد."
+
+    except Exception as e:
+
+        error_text = str(e)
+
+        logger.error(
+            "Gemini API error: %s",
+            error_text,
+        )
+
+        if "401" in error_text or "UNAUTHENTICATED" in error_text:
+
+            return (
+                "❌ خطا در احراز هویت Gemini.\n\n"
+                "کلید GEMINI_API_KEY در Google AI Studio "
+                "یا تنظیمات Render را بررسی کنید."
+            )
+
+        if "429" in error_text:
+
+            return (
+                "⏳ تعداد درخواست‌های Gemini زیاد شده است. "
+                "لطفاً چند لحظه بعد دوباره امتحان کنید."
+            )
+
+        return (
+            "❌ در ارتباط با Gemini خطایی رخ داد.\n"
+            "لطفاً چند لحظه بعد دوباره امتحان کنید."
+        )
+
+
+# =========================================================
+# TRANSLATE IMAGE PROMPT
+# =========================================================
+
+def generate_ai_image_prompt(user_text: str) -> str:
+
+    instruction = f"""
+Translate and improve the following Persian request into a
+high-quality English prompt for an AI image generator.
+
+Requirements:
+- Output ONLY the English image prompt.
+- Do not explain anything.
+- Make the prompt detailed and visually descriptive.
+- Preserve the user's original intention.
+
+Persian request:
+{user_text}
+"""
+
+    try:
+
+        response = ai_client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=instruction,
+        )
+
+        text = getattr(response, "text", None)
+
+        if text:
+            return text.strip()
+
         return user_text
 
-# تولید تصویر رایگان
+    except Exception as e:
+
+        logger.error(
+            "Image prompt generation error: %s",
+            str(e),
+        )
+
+        # اگر Gemini برای ترجمه در دسترس نبود،
+        # خود متن کاربر را برای Pollinations می‌فرستیم.
+        return user_text
+
+
+# =========================================================
+# IMAGE GENERATION
+# =========================================================
+
 def create_ai_image(prompt: str):
+
     try:
-        encoded_prompt = urllib.parse.quote(prompt)
-        url = f"https://image.pollinations.ai/prompt/{encoded_prompt}"
-        response = requests.get(url, timeout=30)
+
+        encoded_prompt = urllib.parse.quote(
+            prompt,
+            safe="",
+        )
+
+        url = (
+            "https://image.pollinations.ai/prompt/"
+            + encoded_prompt
+        )
+
+        response = requests.get(
+            url,
+            timeout=60,
+            headers={
+                "User-Agent": "AlexAiTelegramBot/1.0"
+            },
+        )
+
         if response.status_code == 200:
-            return response.content
-        return None
-    except Exception:
-        return None
 
-# دستور /start
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "سلام! من ربات الکس هستم.\nمی‌توانید از من سوال بپرسید یا برای دریافت عکس، متنی مثل «عکس یک گربه» ارسال کنید."
-    )
-
-# مدیریت پیام‌های تلگرام
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    chat_id = update.effective_chat.id
-    user_text = update.message.text
-    text_lower = user_text.lower()
-
-    image_keywords = ['عکس', 'تصویر', 'بساط', 'بفرست', 'خلق کن', 'بکش', 'طراحی کن']
-    is_question = any(q in text_lower for q in ['میتونی', 'می‌توانی', 'آیا', 'ایا', 'چرا', 'چطور', 'چگونه', 'ادیت', 'ویرایش'])
-    wants_image = any(kw in text_lower for kw in image_keywords) and not is_question
-
-    if wants_image:
-        await context.bot.send_chat_action(chat_id=chat_id, action='upload_photo')
-        await update.message.reply_text('🎨 در حال ساخت تصویر اختصاصی شما... لطفاً چند لحظه صبر کنید.')
-
-        en_prompt = generate_ai_image_prompt(user_text)
-        image_bytes = create_ai_image(en_prompt)
-
-        if image_bytes:
-            await update.message.reply_photo(
-                photo=image_bytes,
-                caption=f"✨ تصویر تولید شده با هوش مصنوعی\n📝 پرامپت انگلیسی: {en_prompt}"
+            content_type = response.headers.get(
+                "Content-Type",
+                "",
             )
-        else:
-            await update.message.reply_text('متأسفانه در ساخت تصویر خطایی رخ داد. لطفاً دوباره تلاش کنید.')
+
+            if content_type.startswith("image/"):
+                return response.content
+
+        logger.error(
+            "Image API returned status %s",
+            response.status_code,
+        )
+
+        return None
+
+    except Exception as e:
+
+        logger.error(
+            "Image generation error: %s",
+            str(e),
+        )
+
+        return None
+
+
+# =========================================================
+# /START COMMAND
+# =========================================================
+
+async def start(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+):
+
+    if not update.message:
         return
 
-    await context.bot.send_chat_action(chat_id=chat_id, action='typing')
-    ai_reply = ask_gemini(user_text)
-    await update.message.reply_text(ai_reply)
+    await update.message.reply_text(
+        "سلام 👋\n\n"
+        "من الکس، دستیار هوش مصنوعی شما هستم 🤖\n\n"
+        "می‌توانید سؤال بپرسید یا برای ساخت تصویر "
+        "مثلاً بنویسید:\n\n"
+        "🎨 عکس یک گربه در فضا بساز"
+    )
 
-if __name__ == '__main__':
-    threading.Thread(target=run_flask, daemon=True).start()
 
-    app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
-    app.add_handler(CommandHandler('start', start))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+# =========================================================
+# TELEGRAM MESSAGE HANDLER
+# =========================================================
 
-    app.run_polling()
+async def handle_message(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+):
+
+    if not update.message:
+        return
+
+    user_text = update.message.text
+
+    if not user_text:
+        return
+
+    user_text = user_text.strip()
+
+    if not user_text:
+        return
+
+    chat_id = update.effective_chat.id
+
+    text_lower = user_text.lower()
+
+
+    # =====================================================
+    # IMAGE KEYWORDS
+    # =====================================================
+
+    image_keywords = [
+        "عکس",
+        "تصویر",
+        "بساز",
+        "خلق کن",
+        "بکش",
+        "طراحی کن",
+        "تصویرسازی",
+        "عکس بساز",
+        "تصویر بساز",
+    ]
+
+
+    question_keywords = [
+        "میتونی",
+        "می‌تونی",
+        "می‌توانی",
+        "میتوانی",
+        "آیا",
+        "ایا",
+        "چرا",
+        "چطور",
+        "چگونه",
+        "ادیت",
+        "ویرایش",
+    ]
+
+
+    wants_image = (
+        any(word in text_lower for word in image_keywords)
+        and not any(
+            word in text_lower
+            for word in question_keywords
+        )
+    )
+
+
+    # =====================================================
+    # IMAGE REQUEST
+    # =====================================================
+
+    if wants_image:
+
+        try:
+
+            await context.bot.send_chat_action(
+                chat_id=chat_id,
+                action="upload_photo",
+            )
+
+            await update.message.reply_text(
+                "🎨 در حال آماده‌سازی تصویر شما...\n"
+                "لطفاً کمی صبر کنید."
+            )
+
+
+            # Translate Persian prompt to English
+            en_prompt = generate_ai_image_prompt(
+                user_text
+            )
+
+
+            # Generate image
+            image_bytes = create_ai_image(
+                en_prompt
+            )
+
+
+            if image_bytes:
+
+                await update.message.reply_photo(
+                    photo=image_bytes,
+                    caption=(
+                        "✨ تصویر شما آماده شد!\n\n"
+                        f"📝 Prompt:\n{en_prompt}"
+                    ),
+                )
+
+            else:
+
+                await update.message.reply_text(
+                    "❌ متأسفانه ساخت تصویر انجام نشد.\n"
+                    "لطفاً دوباره امتحان کنید."
+                )
+
+        except Exception as e:
+
+            logger.exception(
+                "Image request failed: %s",
+                str(e),
+            )
+
+            await update.message.reply_text(
+                "❌ هنگام ساخت تصویر خطایی رخ داد."
+            )
+
+        return
+
+
+    # =====================================================
+    # NORMAL AI CHAT
+    # =====================================================
+
+    try:
+
+        await context.bot.send_chat_action(
+            chat_id=chat_id,
+            action="typing",
+        )
+
+        ai_reply = ask_gemini(
+            user_text
+        )
+
+        await update.message.reply_text(
+            ai_reply
+        )
+
+    except Exception as e:
+
+        logger.exception(
+            "Message handling error: %s",
+            str(e),
+        )
+
+        await update.message.reply_text(
+            "❌ خطایی رخ داد. لطفاً دوباره امتحان کنید."
+        )
+
+
+# =========================================================
+# MAIN
+# =========================================================
+
+def main():
+
+    logger.info("Starting Alex Ai Telegram Bot...")
+
+
+    # Start Flask server for Render
+    flask_thread = threading.Thread(
+        target=run_flask,
+        daemon=True,
+    )
+
+    flask_thread.start()
+
+
+    # Create Telegram application
+    app = (
+        ApplicationBuilder()
+        .token(TELEGRAM_TOKEN)
+        .build()
+    )
+
+
+    # Commands
+    app.add_handler(
+        CommandHandler(
+            "start",
+            start,
+        )
+    )
+
+
+    # Text messages
+    app.add_handler(
+        MessageHandler(
+            filters.TEXT & ~filters.COMMAND,
+            handle_message,
+        )
+    )
+
+
+    logger.info(
+        "Telegram bot is starting polling..."
+    )
+
+
+    app.run_polling(
+        drop_pending_updates=True
+    )
+
+
+# =========================================================
+# RUN
+# =========================================================
+
+if __name__ == "__main__":
+    main()
