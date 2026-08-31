@@ -13,11 +13,15 @@ from telegram.ext import (
 )
 from google import genai
 
-# کلیدها و توکن‌ها
-TELEGRAM_TOKEN = os.getenv("8997663787:AAFIZU23Y-W-66Jx0MR2yMosAALvy5kX0NU")
-GEMINI_API_KEY = os.getenv("AQ.Ab8RN6KXG9t1MuvZKzJRG1HR6GTsHmF7a8n5O0_5ZDq_Oz5rxw")
+# ==========================================
+# 🔑 تنظیم کلیدها
+# ==========================================
+# کلید API خود (شروع با AIzaSy) را اینجا قرار دهید:
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "AQ.Ab8RN6KXG9t1MuvZKzJRG1HR6GTsHmF7a8n5O0_5ZDq_Oz5rxw")
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "8997663787:AAFIZU23Y-W-66Jx0MR2yMosAALvy5kX0NU")
+# ==========================================
 
-# راه‌اندازی کلاینت جمینای با کتابخانه رسمی
+# ساخت کلاینت طبق مستندات جدید گوگل
 ai_client = genai.Client(api_key=GEMINI_API_KEY)
 
 # وب‌سرور Flask برای زنده نگه داشتن سرویس در Render
@@ -31,16 +35,16 @@ def run_flask():
     port = int(os.getenv("PORT", 10000))
     flask_app.run(host="0.0.0.0", port=port)
 
-# پاسخ‌دهی متنی به سوالات با Gemini
+# پاسخ‌دهی متنی با Interactions API و مدل gemini-3.7-flash
 def ask_gemini(user_text: str) -> str:
     try:
-        response = ai_client.models.generate_content(
-            model='gemini-2.5-flash',
-            contents=user_text,
+        interaction = ai_client.interactions.create(
+            model="gemini-3.7-flash",
+            input=user_text
         )
-        return response.text
+        return interaction.output_text
     except Exception as e:
-        return f"خطا در ارتباط با جمینای: {str(e)}"
+        return f"خطای جمینای: {str(e)}"
 
 # ترجمه متن فارسی به پرامپت انگلیسی برای تصویر
 def generate_ai_image_prompt(user_text: str) -> str:
@@ -50,11 +54,11 @@ def generate_ai_image_prompt(user_text: str) -> str:
         f"Output ONLY the English prompt without any extra explanation: {user_text}"
     )
     try:
-        response = ai_client.models.generate_content(
-            model='gemini-2.5-flash',
-            contents=prompt_instruction,
+        interaction = ai_client.interactions.create(
+            model="gemini-3.7-flash",
+            input=prompt_instruction
         )
-        return response.text.strip()
+        return interaction.output_text.strip()
     except Exception:
         return user_text
 
@@ -88,7 +92,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if wants_image:
         await context.bot.send_chat_action(chat_id=chat_id, action='upload_photo')
-        await update.message.reply_text('🎨 در حال ساخت تصویر اختصاصی شما با هوش مصنوعی... لطفاً چند لحظه صبر کنید.')
+        await update.message.reply_text('🎨 در حال ساخت تصویر اختصاصی شما... لطفاً چند لحظه صبر کنید.')
 
         en_prompt = generate_ai_image_prompt(user_text)
         image_bytes = create_ai_image(en_prompt)
