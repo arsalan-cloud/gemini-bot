@@ -11,10 +11,14 @@ from telegram.ext import (
     filters,
     ContextTypes,
 )
+from google import genai
 
-# خواندن متغیرها از Render و در صورت عدم وجود، استفاده از توکن‌های شما
+# کلیدها و توکن‌ها
 TELEGRAM_TOKEN = os.getenv("8997663787:AAFIZU23Y-W-66Jx0MR2yMosAALvy5kX0NU")
 GEMINI_API_KEY = os.getenv("AQ.Ab8RN6KXG9t1MuvZKzJRG1HR6GTsHmF7a8n5O0_5ZDq_Oz5rxw")
+
+# راه‌اندازی کلاینت جمینای با کتابخانه رسمی
+ai_client = genai.Client(api_key=GEMINI_API_KEY)
 
 # وب‌سرور Flask برای زنده نگه داشتن سرویس در Render
 flask_app = Flask(__name__)
@@ -27,53 +31,30 @@ def run_flask():
     port = int(os.getenv("PORT", 10000))
     flask_app.run(host="0.0.0.0", port=port)
 
-# پاسخ‌دهی متنی به سوالات با Gemini (پشتیبانی کامل از کلیدهای سری AQ)
+# پاسخ‌دهی متنی به سوالات با Gemini
 def ask_gemini(user_text: str) -> str:
-    api_key = os.getenv("GEMINI_API_KEY", GEMINI_API_KEY)
-    if not api_key:
-        return "خطا: کلید GEMINI_API_KEY در تنظیمات Render یافت نشد."
-
-    url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
-    headers = {
-        "Content-Type": "application/json",
-        "x-goog-api-key": api_key,
-    }
-    payload = {"contents": [{"parts": [{"text": user_text}]}]}
-
     try:
-        response = requests.post(url, headers=headers, json=payload, timeout=20)
-        data = response.json()
-        if response.status_code == 200:
-            return data["candidates"][0]["content"]["parts"][0]["text"]
-        else:
-            return f"خطای جمینای: {data.get('error', {}).get('message', 'خطای نامشخص')}"
+        response = ai_client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=user_text,
+        )
+        return response.text
     except Exception as e:
-        return f"خطا در ارتباط: {str(e)}"
+        return f"خطا در ارتباط با جمینای: {str(e)}"
 
 # ترجمه متن فارسی به پرامپت انگلیسی برای تصویر
 def generate_ai_image_prompt(user_text: str) -> str:
-    api_key = os.getenv("GEMINI_API_KEY", GEMINI_API_KEY)
-    if not api_key:
-        return user_text
-
-    url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
-    headers = {
-        "Content-Type": "application/json",
-        "x-goog-api-key": api_key,
-    }
     prompt_instruction = (
         "Translate and refine the following Persian user input into a concise, "
         "detailed English prompt suitable for an AI image generator. "
         f"Output ONLY the English prompt without any extra explanation: {user_text}"
     )
-    payload = {"contents": [{"parts": [{"text": prompt_instruction}]}]}
-
     try:
-        response = requests.post(url, headers=headers, json=payload, timeout=20)
-        if response.status_code == 200:
-            data = response.json()
-            return data["candidates"][0]["content"]["parts"][0]["text"].strip()
-        return user_text
+        response = ai_client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=prompt_instruction,
+        )
+        return response.text.strip()
     except Exception:
         return user_text
 
@@ -127,9 +108,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 if __name__ == '__main__':
     threading.Thread(target=run_flask, daemon=True).start()
-
-    if not TELEGRAM_TOKEN:
-        raise ValueError("TELEGRAM_TOKEN is missing in Render Environment Variables!")
 
     app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
     app.add_handler(CommandHandler('start', start))
