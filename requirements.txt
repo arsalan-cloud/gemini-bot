@@ -1,4 +1,3 @@
-python-telegram-bot==21.10
-google-generativeai
-flask
+pyTelegramBotAPI
+selenium
 requests
